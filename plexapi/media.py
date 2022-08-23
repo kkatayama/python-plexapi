@@ -64,6 +64,7 @@ class Media(PlexObject):
         self.optimizedForStreaming = utils.cast(bool, data.attrib.get('optimizedForStreaming'))
         self.parts = self.findItems(data, MediaPart)
         self.proxyType = utils.cast(int, data.attrib.get('proxyType'))
+        self.selected = utils.cast(bool, data.attrib.get('selected'))
         self.target = data.attrib.get('target')
         self.title = data.attrib.get('title')
         self.videoCodec = data.attrib.get('videoCodec')
@@ -71,6 +72,7 @@ class Media(PlexObject):
         self.videoProfile = data.attrib.get('videoProfile')
         self.videoResolution = data.attrib.get('videoResolution')
         self.width = utils.cast(int, data.attrib.get('width'))
+        self.uuid = data.attrib.get('uuid')
 
         if self._isChildOf(etag='Photo'):
             self.aperture = data.attrib.get('aperture')
@@ -146,7 +148,9 @@ class MediaPart(PlexObject):
         self.key = data.attrib.get('key')
         self.optimizedForStreaming = utils.cast(bool, data.attrib.get('optimizedForStreaming'))
         self.packetLength = utils.cast(int, data.attrib.get('packetLength'))
+        self.protocol = data.attrib.get('protocol')
         self.requiredBandwidths = data.attrib.get('requiredBandwidths')
+        self.selected = utils.cast(bool, data.attrib.get('selected'))
         self.size = utils.cast(int, data.attrib.get('size'))
         self.streams = self._buildStreams(data)
         self.syncItemId = utils.cast(int, data.attrib.get('syncItemId'))
@@ -224,7 +228,8 @@ class MediaPartStream(PlexObject):
             id (int): The unique ID for this stream on the server.
             index (int): The index of the stream.
             language (str): The language of the stream (ex: English, ไทย).
-            languageCode (str): The Ascii language code of the stream (ex: eng, tha).
+            languageCode (str): The ASCII language code of the stream (ex: eng, tha).
+            languageTag (str): The two letter language tag of the stream (ex: en, fr).
             requiredBandwidths (str): The required bandwidths to stream the file.
             selected (bool): True if this stream is selected.
             streamType (int): The stream type (1= :class:`~plexapi.media.VideoStream`,
@@ -238,14 +243,17 @@ class MediaPartStream(PlexObject):
         self._data = data
         self.bitrate = utils.cast(int, data.attrib.get('bitrate'))
         self.codec = data.attrib.get('codec')
+        self.decision = data.attrib.get('decision')
         self.default = utils.cast(bool, data.attrib.get('default'))
         self.displayTitle = data.attrib.get('displayTitle')
         self.extendedDisplayTitle = data.attrib.get('extendedDisplayTitle')
-        self.key = data.attrib.get('key')
         self.id = utils.cast(int, data.attrib.get('id'))
         self.index = utils.cast(int, data.attrib.get('index', '-1'))
+        self.key = data.attrib.get('key')
         self.language = data.attrib.get('language')
         self.languageCode = data.attrib.get('languageCode')
+        self.languageTag = data.attrib.get('languageTag')
+        self.location = data.attrib.get('location')
         self.requiredBandwidths = data.attrib.get('requiredBandwidths')
         self.selected = utils.cast(bool, data.attrib.get('selected', '0'))
         self.streamType = utils.cast(int, data.attrib.get('streamType'))
@@ -572,7 +580,7 @@ class Optimized(PlexObject):
         """
         key = '%s/%s/items' % (self._initpath, self.id)
         return self.fetchItems(key)
-        
+
     def remove(self):
         """ Remove an Optimized item"""
         key = '%s/%s' % (self._initpath, self.id)
@@ -871,7 +879,7 @@ class GuidTag(PlexObject):
     """ Base class for guid tags used only for Guids, as they contain only a string identifier
 
         Attributes:
-            id (id): The guid for external metadata sources (e.g. IMDB, TMDB, TVDB).
+            id (id): The guid for external metadata sources (e.g. IMDB, TMDB, TVDB, MBID).
     """
 
     def _loadData(self, data):
@@ -893,7 +901,7 @@ class Guid(GuidTag):
 @utils.registerPlexObject
 class Review(PlexObject):
     """ Represents a single Review for a Movie.
-    
+
         Attributes:
             TAG (str): 'Review'
             filter (str): filter for reviews?
@@ -967,7 +975,7 @@ class Theme(BaseResource):
 
 @utils.registerPlexObject
 class Chapter(PlexObject):
-    """ Represents a single Writer media tag.
+    """ Represents a single Chapter media tag.
 
         Attributes:
             TAG (str): 'Chapter'
@@ -1112,3 +1120,41 @@ class AgentMediaType(Agent):
     @deprecated('use "languageCodes" instead')
     def languageCode(self):
         return self.languageCodes
+
+
+@utils.registerPlexObject
+class Availability(PlexObject):
+    """ Represents a single online streaming service Availability.
+
+        Attributes:
+            TAG (str): 'Availability'
+            country (str): The streaming service country.
+            offerType (str): Subscription, buy, or rent from the streaming service.
+            platform (str): The platform slug for the streaming service.
+            platformColorThumb (str): Thumbnail icon for the streaming service.
+            platformInfo (str): The streaming service platform info.
+            platformUrl (str): The URL to the media on the streaming service.
+            price (float): The price to buy or rent from the streaming service.
+            priceDescription (str): The display price to buy or rent from the streaming service.
+            quality (str): The video quality on the streaming service.
+            title (str): The title of the streaming service.
+            url (str): The Plex availability URL.
+    """
+    TAG = 'Availability'
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}:{self.platform}:{self.offerType}>'
+
+    def _loadData(self, data):
+        self._data = data
+        self.country = data.attrib.get('country')
+        self.offerType = data.attrib.get('offerType')
+        self.platform = data.attrib.get('platform')
+        self.platformColorThumb = data.attrib.get('platformColorThumb')
+        self.platformInfo = data.attrib.get('platformInfo')
+        self.platformUrl = data.attrib.get('platformUrl')
+        self.price = utils.cast(float, data.attrib.get('price'))
+        self.priceDescription = data.attrib.get('priceDescription')
+        self.quality = data.attrib.get('quality')
+        self.title = data.attrib.get('title')
+        self.url = data.attrib.get('url')

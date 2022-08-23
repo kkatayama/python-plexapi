@@ -8,7 +8,7 @@ from plexapi.exceptions import BadRequest, NotFound
 from plexapi.utils import deprecated
 
 
-class AdvancedSettingsMixin(object):
+class AdvancedSettingsMixin:
     """ Mixin for Plex objects that can have advanced settings. """
 
     def preferences(self):
@@ -60,7 +60,7 @@ class AdvancedSettingsMixin(object):
         self._server.query(url, method=self._server._session.put)
 
 
-class SmartFilterMixin(object):
+class SmartFilterMixin:
     """ Mixing for Plex objects that can have smart filters. """
 
     def _parseFilters(self, content):
@@ -120,12 +120,12 @@ class SmartFilterMixin(object):
         return {filterOp: rules}
 
 
-class SplitMergeMixin(object):
+class SplitMergeMixin:
     """ Mixin for Plex objects that can be split and merged. """
 
     def split(self):
         """ Split duplicated Plex object into separate objects. """
-        key = '/library/metadata/%s/split' % self.ratingKey
+        key = f'{self.key}/split'
         return self._server.query(key, method=self._server._session.put)
 
     def merge(self, ratingKeys):
@@ -141,12 +141,12 @@ class SplitMergeMixin(object):
         return self._server.query(key, method=self._server._session.put)
 
 
-class UnmatchMatchMixin(object):
+class UnmatchMatchMixin:
     """ Mixin for Plex objects that can be unmatched and matched. """
 
     def unmatch(self):
         """ Unmatches metadata match from object. """
-        key = '/library/metadata/%s/unmatch' % self.ratingKey
+        key = f'{self.key}/unmatch'
         self._server.query(key, method=self._server._session.put)
 
     def matches(self, agent=None, title=None, year=None, language=None):
@@ -177,7 +177,7 @@ class UnmatchMatchMixin(object):
 
                 For 2 to 7, the agent and language is automatically filled in
         """
-        key = '/library/metadata/%s/matches' % self.ratingKey
+        key = f'{self.key}/matches'
         params = {'manual': 1}
 
         if agent and not any([title, year, language]):
@@ -191,7 +191,7 @@ class UnmatchMatchMixin(object):
                     params['title'] = title
 
                 if year is None:
-                    params['year'] = self.year
+                    params['year'] = getattr(self, 'year', '')
                 else:
                     params['year'] = year
 
@@ -216,7 +216,7 @@ class UnmatchMatchMixin(object):
                     ~plexapi.base.matches()
                 agent (str): Agent name to be used (imdb, thetvdb, themoviedb, etc.)
         """
-        key = '/library/metadata/%s/match' % self.ratingKey
+        key = f'{self.key}/match'
         if auto:
             autoMatch = self.matches(agent=agent)
             if autoMatch:
@@ -234,7 +234,7 @@ class UnmatchMatchMixin(object):
         self._server.query(data, method=self._server._session.put)
 
 
-class ExtrasMixin(object):
+class ExtrasMixin:
     """ Mixin for Plex objects that can have extras. """
 
     def extras(self):
@@ -244,17 +244,18 @@ class ExtrasMixin(object):
         return self.findItems(data, Extra, rtag='Extras')
 
 
-class HubsMixin(object):
+class HubsMixin:
     """ Mixin for Plex objects that can have related hubs. """
 
     def hubs(self):
         """ Returns a list of :class:`~plexapi.library.Hub` objects. """
         from plexapi.library import Hub
-        data = self._server.query(self._details_key)
-        return self.findItems(data, Hub, rtag='Related')
+        key = f'{self.key}/related'
+        data = self._server.query(key)
+        return self.findItems(data, Hub)
 
 
-class RatingMixin(object):
+class RatingMixin:
     """ Mixin for Plex objects that can have user star ratings. """
 
     def rate(self, rating=None):
@@ -274,7 +275,7 @@ class RatingMixin(object):
         self._server.query(key, method=self._server._session.put)
 
 
-class ArtUrlMixin(object):
+class ArtUrlMixin:
     """ Mixin for Plex objects that can have a background artwork url. """
     
     @property
@@ -289,7 +290,7 @@ class ArtMixin(ArtUrlMixin):
 
     def arts(self):
         """ Returns list of available :class:`~plexapi.media.Art` objects. """
-        return self.fetchItems('/library/metadata/%s/arts' % self.ratingKey, cls=media.Art)
+        return self.fetchItems(f'/library/metadata/{self.ratingKey}/arts', cls=media.Art)
 
     def uploadArt(self, url=None, filepath=None):
         """ Upload a background artwork from a url or filepath.
@@ -299,10 +300,10 @@ class ArtMixin(ArtUrlMixin):
                 filepath (str): The full file path the the image to upload.
         """
         if url:
-            key = '/library/metadata/%s/arts?url=%s' % (self.ratingKey, quote_plus(url))
+            key = f'/library/metadata/{self.ratingKey}/arts?url={quote_plus(url)}'
             self._server.query(key, method=self._server._session.post)
         elif filepath:
-            key = '/library/metadata/%s/arts?' % self.ratingKey
+            key = f'/library/metadata/{self.ratingKey}/arts'
             data = open(filepath, 'rb').read()
             self._server.query(key, method=self._server._session.post, data=data)
 
@@ -323,7 +324,7 @@ class ArtMixin(ArtUrlMixin):
         return self._edit(**{'art.locked': 0})
 
 
-class BannerUrlMixin(object):
+class BannerUrlMixin:
     """ Mixin for Plex objects that can have a banner url. """
 
     @property
@@ -338,7 +339,7 @@ class BannerMixin(BannerUrlMixin):
 
     def banners(self):
         """ Returns list of available :class:`~plexapi.media.Banner` objects. """
-        return self.fetchItems('/library/metadata/%s/banners' % self.ratingKey, cls=media.Banner)
+        return self.fetchItems(f'/library/metadata/{self.ratingKey}/banners', cls=media.Banner)
 
     def uploadBanner(self, url=None, filepath=None):
         """ Upload a banner from a url or filepath.
@@ -348,10 +349,10 @@ class BannerMixin(BannerUrlMixin):
                 filepath (str): The full file path the the image to upload.
         """
         if url:
-            key = '/library/metadata/%s/banners?url=%s' % (self.ratingKey, quote_plus(url))
+            key = f'/library/metadata/{self.ratingKey}/banners?url={quote_plus(url)}'
             self._server.query(key, method=self._server._session.post)
         elif filepath:
-            key = '/library/metadata/%s/banners?' % self.ratingKey
+            key = f'/library/metadata/{self.ratingKey}/banners'
             data = open(filepath, 'rb').read()
             self._server.query(key, method=self._server._session.post, data=data)
 
@@ -372,7 +373,7 @@ class BannerMixin(BannerUrlMixin):
         return self._edit(**{'banner.locked': 0})
 
 
-class PosterUrlMixin(object):
+class PosterUrlMixin:
     """ Mixin for Plex objects that can have a poster url. """
 
     @property
@@ -392,7 +393,7 @@ class PosterMixin(PosterUrlMixin):
 
     def posters(self):
         """ Returns list of available :class:`~plexapi.media.Poster` objects. """
-        return self.fetchItems('/library/metadata/%s/posters' % self.ratingKey, cls=media.Poster)
+        return self.fetchItems(f'/library/metadata/{self.ratingKey}/posters', cls=media.Poster)
 
     def uploadPoster(self, url=None, filepath=None):
         """ Upload a poster from a url or filepath.
@@ -402,10 +403,10 @@ class PosterMixin(PosterUrlMixin):
                 filepath (str): The full file path the the image to upload.
         """
         if url:
-            key = '/library/metadata/%s/posters?url=%s' % (self.ratingKey, quote_plus(url))
+            key = f'/library/metadata/{self.ratingKey}/posters?url={quote_plus(url)}'
             self._server.query(key, method=self._server._session.post)
         elif filepath:
-            key = '/library/metadata/%s/posters?' % self.ratingKey
+            key = f'/library/metadata/{self.ratingKey}/posters'
             data = open(filepath, 'rb').read()
             self._server.query(key, method=self._server._session.post, data=data)
 
@@ -426,7 +427,7 @@ class PosterMixin(PosterUrlMixin):
         return self._edit(**{'thumb.locked': 0})
 
 
-class ThemeUrlMixin(object):
+class ThemeUrlMixin:
     """ Mixin for Plex objects that can have a theme url. """
 
     @property
@@ -441,7 +442,7 @@ class ThemeMixin(ThemeUrlMixin):
 
     def themes(self):
         """ Returns list of available :class:`~plexapi.media.Theme` objects. """
-        return self.fetchItems('/library/metadata/%s/themes' % self.ratingKey, cls=media.Theme)
+        return self.fetchItems(f'/library/metadata/{self.ratingKey}/themes', cls=media.Theme)
 
     def uploadTheme(self, url=None, filepath=None):
         """ Upload a theme from url or filepath.
@@ -453,10 +454,10 @@ class ThemeMixin(ThemeUrlMixin):
                 filepath (str): The full file path to the theme to upload.
         """
         if url:
-            key = '/library/metadata/%s/themes?url=%s' % (self.ratingKey, quote_plus(url))
+            key = f'/library/metadata/{self.ratingKey}/themes?url={quote_plus(url)}'
             self._server.query(key, method=self._server._session.post)
         elif filepath:
-            key = '/library/metadata/%s/themes?' % self.ratingKey
+            key = f'/library/metadata/{self.ratingKey}/themes'
             data = open(filepath, 'rb').read()
             self._server.query(key, method=self._server._session.post, data=data)
 
@@ -475,7 +476,7 @@ class ThemeMixin(ThemeUrlMixin):
         self._edit(**{'theme.locked': 0})
 
 
-class EditFieldMixin(object):
+class EditFieldMixin:
     """ Mixin for editing Plex object fields. """
     
     def editField(self, field, value, locked=True, **kwargs):
@@ -667,7 +668,7 @@ class PhotoCapturedTimeMixin(EditFieldMixin):
         return self.editField('originallyAvailableAt', capturedTime, locked=locked)
 
 
-class EditTagsMixin(object):
+class EditTagsMixin:
     """ Mixin for editing Plex object tags. """
 
     @deprecated('use "editTags" instead')
@@ -984,3 +985,65 @@ class WriterMixin(EditTagsMixin):
                 locked (bool): True (default) to lock the field, False to unlock the field.
         """
         return self.editTags('writer', writers, locked=locked, remove=True)
+
+
+class WatchlistMixin:
+    """ Mixin for Plex objects that can be added to a user's watchlist. """
+
+    def onWatchlist(self, account=None):
+        """ Returns True if the item is on the user's watchlist.
+            Also see :func:`~plexapi.myplex.MyPlexAccount.onWatchlist`.
+
+            Parameters:
+                account (:class:`~plexapi.myplex.MyPlexAccount`, optional): Account to check item on the watchlist.
+                   Note: This is required if you are not connected to a Plex server instance using the admin account.
+        """
+        try:
+            account = account or self._server.myPlexAccount()
+        except AttributeError:
+            account = self._server
+        return account.onWatchlist(self)
+
+    def addToWatchlist(self, account=None):
+        """ Add this item to the specified user's watchlist.
+            Also see :func:`~plexapi.myplex.MyPlexAccount.addToWatchlist`.
+
+            Parameters:
+                account (:class:`~plexapi.myplex.MyPlexAccount`, optional): Account to add item to the watchlist.
+                   Note: This is required if you are not connected to a Plex server instance using the admin account.
+        """
+        try:
+            account = account or self._server.myPlexAccount()
+        except AttributeError:
+            account = self._server
+        account.addToWatchlist(self)
+
+    def removeFromWatchlist(self, account=None):
+        """ Remove this item from the specified user's watchlist.
+            Also see :func:`~plexapi.myplex.MyPlexAccount.removeFromWatchlist`.
+
+            Parameters:
+                account (:class:`~plexapi.myplex.MyPlexAccount`, optional): Account to remove item from the watchlist.
+                   Note: This is required if you are not connected to a Plex server instance using the admin account.
+        """
+        try:
+            account = account or self._server.myPlexAccount()
+        except AttributeError:
+            account = self._server
+        account.removeFromWatchlist(self)
+
+    def streamingServices(self, account=None):
+        """ Return a list of :class:`~plexapi.media.Availability`
+            objects for the available streaming services for this item.
+
+            Parameters:
+                account (:class:`~plexapi.myplex.MyPlexAccount`, optional): Account used to retrieve availability.
+                   Note: This is required if you are not connected to a Plex server instance using the admin account.
+        """
+        try:
+            account = account or self._server.myPlexAccount()
+        except AttributeError:
+            account = self._server
+        ratingKey = self.guid.rsplit('/', 1)[-1]
+        data = account.query(f"{account.METADATA}/library/metadata/{ratingKey}/availabilities")
+        return self.findItems(data)

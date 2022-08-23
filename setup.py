@@ -3,7 +3,6 @@
 """
 Install PlexAPI
 """
-import re
 try:
     from setuptools import setup
 except ImportError:
@@ -14,7 +13,7 @@ from plexapi import const
 # Get README.rst contents
 readme = open('README.rst', 'r').read()
 
-# Get requirments
+# Get requirements
 requirements = []
 with open('requirements.txt') as handle:
     for line in handle.readlines():
@@ -31,7 +30,7 @@ setup(
     url='https://github.com/pkkid/python-plexapi',
     packages=['plexapi'],
     install_requires=requirements,
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     long_description=readme,
     keywords=['plex', 'api'],
     classifiers=[

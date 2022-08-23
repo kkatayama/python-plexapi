@@ -9,6 +9,7 @@ import time
 import unicodedata
 import warnings
 import zipfile
+from collections import deque
 from datetime import datetime
 from getpass import getpass
 from threading import Event, Thread
@@ -25,10 +26,66 @@ except ImportError:
 log = logging.getLogger('plexapi')
 
 # Search Types - Plex uses these to filter specific media types when searching.
-# Library Types - Populated at runtime
-SEARCHTYPES = {'movie': 1, 'show': 2, 'season': 3, 'episode': 4, 'trailer': 5, 'comic': 6, 'person': 7,
-               'artist': 8, 'album': 9, 'track': 10, 'picture': 11, 'clip': 12, 'photo': 13, 'photoalbum': 14,
-               'playlist': 15, 'playlistFolder': 16, 'collection': 18, 'optimizedVersion': 42, 'userPlaylistItem': 1001}
+SEARCHTYPES = {
+    'movie': 1,
+    'show': 2,
+    'season': 3,
+    'episode': 4,
+    'trailer': 5,
+    'comic': 6,
+    'person': 7,
+    'artist': 8,
+    'album': 9,
+    'track': 10,
+    'picture': 11,
+    'clip': 12,
+    'photo': 13,
+    'photoalbum': 14,
+    'playlist': 15,
+    'playlistFolder': 16,
+    'collection': 18,
+    'optimizedVersion': 42,
+    'userPlaylistItem': 1001,
+}
+# Tag Types - Plex uses these to filter specific tags when searching.
+TAGTYPES = {
+    'tag': 0,
+    'genre': 1,
+    'collection': 2,
+    'director': 4,
+    'writer': 5,
+    'role': 6,
+    'producer': 7,
+    'country': 8,
+    'chapter': 9,
+    'review': 10,
+    'label': 11,
+    'marker': 12,
+    'mediaProcessingTarget': 42,
+    'make': 200,
+    'model': 201,
+    'aperture': 202,
+    'exposure': 203,
+    'iso': 204,
+    'lens': 205,
+    'device': 206,
+    'autotag': 207,
+    'mood': 300,
+    'style': 301,
+    'format': 302,
+    'similar': 305,
+    'concert': 306,
+    'banner': 311,
+    'poster': 312,
+    'art': 313,
+    'guid': 314,
+    'ratingImage': 316,
+    'theme': 317,
+    'studio': 318,
+    'network': 319,
+    'place': 400,
+}
+# Plex Objects - Populated at runtime
 PLEXOBJECTS = {}
 
 
@@ -60,6 +117,8 @@ def registerPlexObject(cls):
     """
     etype = getattr(cls, 'STREAMTYPE', getattr(cls, 'TAGTYPE', cls.TYPE))
     ehash = '%s.%s' % (cls.TAG, etype) if etype else cls.TAG
+    if getattr(cls, '_SESSIONTYPE', None):
+        ehash = '%s.%s' % (ehash, 'session')
     if ehash in PLEXOBJECTS:
         raise Exception('Ambiguous PlexObject definition %s(tag=%s, type=%s) with %s' %
             (cls.__name__, cls.TAG, etype, PLEXOBJECTS[ehash].__name__))
@@ -148,8 +207,7 @@ def searchType(libtype):
     """ Returns the integer value of the library string type.
 
         Parameters:
-            libtype (str): LibType to lookup (movie, show, season, episode, artist, album, track,
-                                              collection)
+            libtype (str): LibType to lookup (See :data:`~plexapi.utils.SEARCHTYPES`)
 
         Raises:
             :exc:`~plexapi.exceptions.NotFound`: Unknown libtype
@@ -180,6 +238,41 @@ def reverseSearchType(libtype):
     raise NotFound('Unknown libtype: %s' % libtype)
 
 
+def tagType(tag):
+    """ Returns the integer value of the library tag type.
+
+        Parameters:
+            tag (str): Tag to lookup (See :data:`~plexapi.utils.TAGTYPES`)
+
+        Raises:
+            :exc:`~plexapi.exceptions.NotFound`: Unknown tag
+    """
+    tag = str(tag)
+    if tag in [str(v) for v in TAGTYPES.values()]:
+        return tag
+    if TAGTYPES.get(tag) is not None:
+        return TAGTYPES[tag]
+    raise NotFound('Unknown tag: %s' % tag)
+
+
+def reverseTagType(tag):
+    """ Returns the string value of the library tag type.
+
+        Parameters:
+            tag (int): Integer value of the library tag type.
+
+        Raises:
+            :exc:`~plexapi.exceptions.NotFound`: Unknown tag
+    """
+    if tag in TAGTYPES:
+        return tag
+    tag = int(tag)
+    for k, v in TAGTYPES.items():
+        if tag == v:
+            return k
+    raise NotFound('Unknown tag: %s' % tag)
+
+
 def threaded(callback, listargs):
     """ Returns the result of <callback> for each set of `*args` in listargs. Each call
         to <callback> is called concurrently in their own separate threads.
@@ -194,7 +287,7 @@ def threaded(callback, listargs):
         args += [results, len(results)]
         results.append(None)
         threads.append(Thread(target=callback, args=args, kwargs=dict(job_is_done_event=job_is_done_event)))
-        threads[-1].setDaemon(True)
+        threads[-1].daemon = True
         threads[-1].start()
     while not job_is_done_event.is_set():
         if all(not t.is_alive() for t in threads):
@@ -304,7 +397,7 @@ def download(url, token, filename=None, savepath=None, session=None, chunksize=4
             filename (str): Filename of the downloaded file, default None.
             savepath (str): Defaults to current working dir.
             chunksize (int): What chunksize read/write at the time.
-            mocked (bool): Helper to do evertything except write the file.
+            mocked (bool): Helper to do everything except write the file.
             unpack (bool): Unpack the zip file.
             showstatus(bool): Display a progressbar.
 
@@ -393,7 +486,7 @@ def getMyPlexAccount(opts=None):  # pragma: no cover
 
 
 def createMyPlexDevice(headers, account, timeout=10):  # pragma: no cover
-    """ Helper function to create a new MyPlexDevice.
+    """ Helper function to create a new MyPlexDevice. Returns a new MyPlexDevice instance.
 
         Parameters:
             headers (dict): Provide the X-Plex- headers for the new device.
@@ -414,6 +507,33 @@ def createMyPlexDevice(headers, account, timeout=10):  # pragma: no cover
     pinlogin.waitForLogin()
 
     return account.device(clientId=clientIdentifier)
+
+
+def plexOAuth(headers, forwardUrl=None, timeout=120):  # pragma: no cover
+    """ Helper function for Plex OAuth login. Returns a new MyPlexAccount instance.
+
+        Parameters:
+            headers (dict): Provide the X-Plex- headers for the new device.
+                A unique X-Plex-Client-Identifier is required.
+            forwardUrl (str, optional): The url to redirect the client to after login.
+            timeout (int, optional): Timeout in seconds to wait for device login. Default 120 seconds.
+    """
+    from plexapi.myplex import MyPlexAccount, MyPlexPinLogin
+
+    if 'X-Plex-Client-Identifier' not in headers:
+        raise BadRequest('The X-Plex-Client-Identifier header is required.')
+
+    pinlogin = MyPlexPinLogin(headers=headers, oauth=True)
+    print('Login to Plex at the following url:')
+    print(pinlogin.oauthUrl(forwardUrl))
+    pinlogin.run(timeout=timeout)
+    pinlogin.waitForLogin()
+
+    if pinlogin.token:
+        print('Login successful!')
+        return MyPlexAccount(token=pinlogin.token)
+    else:
+        print('Login failed.')
 
 
 def choose(msg, items, attr):  # pragma: no cover
@@ -472,3 +592,15 @@ def deprecated(message, stacklevel=2):
             return func(*args, **kwargs)
         return wrapper
     return decorator
+
+
+def iterXMLBFS(root, tag=None):
+    """ Iterate through an XML tree using a breadth-first search.
+        If tag is specified, only return nodes with that tag.
+    """
+    queue = deque([root])
+    while queue:
+        node = queue.popleft()
+        if tag is None or node.tag == tag:
+            yield node
+        queue.extend(list(node))

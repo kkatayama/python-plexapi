@@ -58,8 +58,12 @@ def test_library_section_get_movie(movies):
 
 
 def test_library_MovieSection_getGuid(movies, movie):
+    result = movies.getGuid(guid=movie.guid)
+    assert result == movie
     result = movies.getGuid(guid=movie.guids[0].id)
     assert result == movie
+    with pytest.raises(NotFound):
+        movies.getGuid(guid='plex://movie/abcdefg')
     with pytest.raises(NotFound):
         movies.getGuid(guid='imdb://tt00000000')
 
@@ -223,6 +227,13 @@ def test_library_Library_search(plex):
     item = plex.library.search("Elephants Dream")[0]
     assert item.title == "Elephants Dream"
     assert len(plex.library.search(libtype="episode"))
+
+
+def test_library_Library_tags(plex):
+    tags = plex.library.tags('genre')
+    assert len(tags)
+    with pytest.raises(NotFound):
+        plex.library.tags('unknown')
 
 
 def test_library_MovieSection_update(movies):

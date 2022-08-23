@@ -3,7 +3,7 @@ import os
 from urllib.parse import quote_plus
 
 from plexapi import media, utils
-from plexapi.base import Playable, PlexPartialObject
+from plexapi.base import Playable, PlexPartialObject, PlexSession
 from plexapi.exceptions import BadRequest
 from plexapi.mixins import (
     AdvancedSettingsMixin, SplitMergeMixin, UnmatchMatchMixin, ExtrasMixin, HubsMixin, RatingMixin,
@@ -46,7 +46,6 @@ class Audio(PlexPartialObject):
             userRating (float): Rating of the item (0.0 - 10.0) equaling (0 stars - 5 stars).
             viewCount (int): Count of times the item was played.
     """
-
     METADATA_TYPE = 'track'
 
     def _loadData(self, data):
@@ -146,6 +145,7 @@ class Artist(
             collections (List<:class:`~plexapi.media.Collection`>): List of collection objects.
             countries (List<:class:`~plexapi.media.Country`>): List country objects.
             genres (List<:class:`~plexapi.media.Genre`>): List of genre objects.
+            guids (List<:class:`~plexapi.media.Guid`>): List of guid objects.
             key (str): API URL (/library/metadata/<ratingkey>).
             labels (List<:class:`~plexapi.media.Label`>): List of label objects.
             locations (List<str>): List of folder paths where the artist is found on disk.
@@ -163,6 +163,7 @@ class Artist(
         self.collections = self.findItems(data, media.Collection)
         self.countries = self.findItems(data, media.Country)
         self.genres = self.findItems(data, media.Genre)
+        self.guids = self.findItems(data, media.Guid)
         self.key = self.key.replace('/children', '')  # FIX_BUG_50
         self.labels = self.findItems(data, media.Label)
         self.locations = self.listAttrs(data, 'path', etag='Location')
@@ -199,7 +200,7 @@ class Artist(
             Raises:
                 :exc:`~plexapi.exceptions.BadRequest`: If title or album and track parameters are missing.
         """
-        key = '/library/metadata/%s/allLeaves' % self.ratingKey
+        key = f'{self.key}/allLeaves'
         if title is not None:
             return self.fetchItem(key, Track, title__iexact=title)
         elif album is not None and track is not None:
@@ -208,7 +209,7 @@ class Artist(
 
     def tracks(self, **kwargs):
         """ Returns a list of :class:`~plexapi.audio.Track` objects by the artist. """
-        key = '/library/metadata/%s/allLeaves' % self.ratingKey
+        key = f'{self.key}/allLeaves'
         return self.fetchItems(key, Track, **kwargs)
 
     def get(self, title=None, album=None, track=None):
@@ -253,6 +254,7 @@ class Album(
             collections (List<:class:`~plexapi.media.Collection`>): List of collection objects.
             formats (List<:class:`~plexapi.media.Format`>): List of format objects.
             genres (List<:class:`~plexapi.media.Genre`>): List of genre objects.
+            guids (List<:class:`~plexapi.media.Guid`>): List of guid objects.
             key (str): API URL (/library/metadata/<ratingkey>).
             labels (List<:class:`~plexapi.media.Label`>): List of label objects.
             leafCount (int): Number of items in the album view.
@@ -280,6 +282,7 @@ class Album(
         self.collections = self.findItems(data, media.Collection)
         self.formats = self.findItems(data, media.Format)
         self.genres = self.findItems(data, media.Genre)
+        self.guids = self.findItems(data, media.Guid)
         self.key = self.key.replace('/children', '')  # FIX_BUG_50
         self.labels = self.findItems(data, media.Label)
         self.leafCount = utils.cast(int, data.attrib.get('leafCount'))
@@ -312,16 +315,20 @@ class Album(
             Raises:
                 :exc:`~plexapi.exceptions.BadRequest`: If title or track parameter is missing.
         """
-        key = '/library/metadata/%s/children' % self.ratingKey
-        if title is not None:
+        key = f'{self.key}/children'
+        if title is not None and not isinstance(title, int):
             return self.fetchItem(key, Track, title__iexact=title)
-        elif track is not None:
-            return self.fetchItem(key, Track, parentTitle__iexact=self.title, index=track)
+        elif track is not None or isinstance(title, int):
+            if isinstance(title, int):
+                index = title
+            else:
+                index = track
+            return self.fetchItem(key, Track, parentTitle__iexact=self.title, index=index)
         raise BadRequest('Missing argument: title or track is required')
 
     def tracks(self, **kwargs):
         """ Returns a list of :class:`~plexapi.audio.Track` objects in the album. """
-        key = '/library/metadata/%s/children' % self.ratingKey
+        key = f'{self.key}/children'
         return self.fetchItems(key, Track, **kwargs)
 
     def get(self, title=None, track=None):
@@ -376,6 +383,7 @@ class Track(
             grandparentThumb (str): URL to album artist thumbnail image
                 (/library/metadata/<grandparentRatingKey>/thumb/<thumbid>).
             grandparentTitle (str): Name of the album artist for the track.
+            guids (List<:class:`~plexapi.media.Guid`>): List of guid objects.
             labels (List<:class:`~plexapi.media.Label`>): List of label objects.
             media (List<:class:`~plexapi.media.Media`>): List of media objects.
             originalTitle (str): The artist for the track.
@@ -386,7 +394,7 @@ class Track(
             parentThumb (str): URL to album thumbnail image (/library/metadata/<parentRatingKey>/thumb/<thumbid>).
             parentTitle (str): Name of the album for the track.
             primaryExtraKey (str) API URL for the primary extra for the track.
-            ratingCount (int): Number of ratings contributing to the rating score.
+            ratingCount (int): Number of listeners who have scrobbled this track, as reported by Last.fm.
             skipCount (int): Number of times the track has been skipped.
             viewOffset (int): View offset in milliseconds.
             year (int): Year the track was released.
@@ -408,6 +416,7 @@ class Track(
         self.grandparentTheme = data.attrib.get('grandparentTheme')
         self.grandparentThumb = data.attrib.get('grandparentThumb')
         self.grandparentTitle = data.attrib.get('grandparentTitle')
+        self.guids = self.findItems(data, media.Guid)
         self.labels = self.findItems(data, media.Label)
         self.media = self.findItems(data, media.Media)
         self.originalTitle = data.attrib.get('originalTitle')
@@ -458,3 +467,16 @@ class Track(
     def _getWebURL(self, base=None):
         """ Get the Plex Web URL with the correct parameters. """
         return self._server._buildWebURL(base=base, endpoint='details', key=self.parentKey)
+
+
+@utils.registerPlexObject
+class TrackSession(PlexSession, Track):
+    """ Represents a single Track session
+        loaded from :func:`~plexapi.server.PlexServer.sessions`.
+    """
+    _SESSIONTYPE = True
+
+    def _loadData(self, data):
+        """ Load attribute values from Plex XML response. """
+        Track._loadData(self, data)
+        PlexSession._loadData(self, data)
